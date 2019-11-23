@@ -389,13 +389,13 @@ account = get_account_info()
     # browser.find_by_text('Can\'t get the text message?').first.click()
     # browser.find_by_value("Answer a security question").first.click()
     # if browser.is_text_present('What is your paternal grandfather\'s first name?'):
-    #   browser.find_by_id('secretquestion').first.fill('yongshui')
+    #   browser.find_by_id('secretquestion').first.fill('youranswer')
     # elif browser.is_text_present('What was the first name of your first manager?'):
-    #   browser.find_by_id('secretquestion').first.fill('hong')
+    #   browser.find_by_id('secretquestion').first.fill('youranswer')
     # elif browser.is_text_present('What was the name of your first pet?'):
-    #   browser.find_by_id('secretquestion').first.fill('doudou')
+    #   browser.find_by_id('secretquestion').first.fill('youranswer')
     # elif browser.is_text_present('What is your father\'s middle name?'):
-    #   browser.find_by_id('secretquestion').first.fill('long')
+    #   browser.find_by_id('secretquestion').first.fill('youranswer')
     # browser.find_by_id('accept').first.click()
     # time.sleep(1)
     # browser.find_by_id('accept').first.click()
