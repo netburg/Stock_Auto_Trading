@@ -2,6 +2,7 @@
 
 ## Warning: 
 ## Only qualified day-trader could use this script. Please note that using this script may be risky and lead to trading loss. 
+View the program running screenshot at http://itsinger.com/wp-content/uploads/2019/12/stock.jpg
 
 ## High Frequency Trading Condithions：
 
