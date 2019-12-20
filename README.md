@@ -2,7 +2,8 @@
 
 <b>High Frequency Trading Condithions：</b>
 
-<b>1 volume/shares outstanding）>2.5% (Not realized yet. To be developed.)</b>
+<b>1 volume/shares outstanding）>2.5% (Not realized yet. To be developed.)
+
 <b>2 buy if a decrease >2% in 20 seconds. </b>
 <b>4 sell at purchase price * 101% immediately when buy order completed. </b>
 <b>5 pending orders for one stock < 3. </b>
