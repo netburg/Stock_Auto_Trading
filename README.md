@@ -1,4 +1,4 @@
-# TDAmeritrade Automatic High Frequency Trading Program Instructions 
+# TDAmeritrade Automatic High Frequency Trading Program 
 
 ## Warning: Only qualified day-trader could use this script. Please note that using this script may be risky and lead to trading loss. 
 
