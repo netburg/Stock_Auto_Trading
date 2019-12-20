@@ -1,4 +1,22 @@
-# import necessary modules or lib
+# Warning: Only qualified day-trader could use this script. Please note that using this script may be risky and lead to trading loss. 
+
+# High Frequency Trading Condithions：
+
+# 1 volume/shares outstanding）>2.5% (Not realized yet. To be developed.)
+# 2 buy if a decrease >2% in 20 seconds 
+# 4 sell at purchase price * 101% immediately when buy order completed.
+# 5 pending orders for one stock < 3
+# 6 Forced sale：sell if hold for 3 workdays and a 20% loss (Not realized yet. To be developed.)
+# 7 Data server: local SQL Server (window connection)
+# 8 When get your fist token, please use script in Note No.1 and copy that to file 'access_token.txt'.
+# 9 Each deal is set <$50. It could be customized by yourself.
+# 10 Requests to TDAmeritrade is limited to 120 times in 2 minutes.
+
+# The script is being tested and needs to be refined. 
+# Please do not use it for profit purpose. Copyright reserved.
+# If you have any questions, please feel free to contact me at zhangjinprc@gmail.com.
+
+
 import requests
 import time
 import datetime
@@ -10,14 +28,9 @@ import asyncio
 import pyodbc
 import nest_asyncio
 import csv
+import copy
+import prettytable as pt
 from splinter import Browser
-
-
-# personal info
-accountId = '8888'
-apiKey = "8888"
-username = "8888"
-password = 8888"
 
 
 def timer():
@@ -56,7 +69,6 @@ def get_all_symbol():
     return keys_string
 
 
-# Get refresh token from local file
 def get_access_token():
     f = open('access_token.txt', 'r')
     token_dict = eval(f.readline())
@@ -80,17 +92,120 @@ def get_access_token():
 
 def get_account_info():
     global accountId, header_1
-    url_account = r'https://api.tdameritrade.com/v1/accounts/{}'.format(accountId)
-    content_account = requests.get(url=url_account, headers=header_1)
-    data_account = content_account.json()
+    url_position = r'https://api.tdameritrade.com/v1/accounts/{}'.format(accountId)
+    params_position = {'fields': 'positions,orders'}
+    content_position = requests.get(url=url_position, params=params_position, headers=header_1)
+    positions_rsp = content_position.json()
     acct_time = timer()
     ff = open('log.txt', 'a+')
-    print(acct_time, '\n', data_account, '\n\n', file=ff)
-    print(acct_time, '\n', data_account, '\n\n', )
+    print(acct_time, '\n', positions_rsp, '\n\n', file=ff)
     ff.close
     time.sleep(1)
-    return data_account
+    return positions_rsp
 
+
+def get_balance_order_info():
+    global queued_buy_orders_0, queued_buy_orders_1, filled_buy_orders, filled_sell_orders, other_orders
+    account = get_account_info()
+    stock_balance = {}
+    tb_balance = pt.PrettyTable()
+
+    total_value = account["securitiesAccount"]["currentBalances"]["liquidationValue"]
+    free_value = account["securitiesAccount"]["currentBalances"]["cashAvailableForTrading"]
+    stock_value = account["securitiesAccount"]["currentBalances"]["longMarketValue"]
+    tb_balance.field_names = ["Balance", "Symbol", "AvgPrice", "Quantity"]
+    tb_balance.add_row(["0-1","free_value", 1, free_value])
+    tb_balance.add_row(["0-2","stock_value", 1, stock_value])
+    tb_balance.add_row(["0-3", "total_value", 1, total_value])
+
+    if "positions" in account["securitiesAccount"].keys():
+        stocks = account["securitiesAccount"]["positions"]
+        stocks_num = len(stocks)
+        for i in range(1, stocks_num):
+            position_symbol = account["securitiesAccount"]["positions"][i]["instrument"]["symbol"]
+            stock_balance[position_symbol] = {}
+        for i in range(1, stocks_num):
+            position_symbol = account["securitiesAccount"]["positions"][i]["instrument"]["symbol"]
+            stock_balance[position_symbol]["price"] = account["securitiesAccount"]["positions"][i]["averagePrice"]
+            stock_balance[position_symbol]["amount"] = account["securitiesAccount"]["positions"][i]["longQuantity"]
+            tb_balance.add_row([i, position_symbol, stock_balance[position_symbol]["price"], stock_balance[position_symbol]["amount"]])
+    else:
+        stock_balance = {}
+    balance = {"free_value": free_value, "total_value": total_value, "stock_value": stock_value, "stock_position": stock_balance}
+    print(tb_balance)
+
+    if "orderStrategies" in account["securitiesAccount"].keys():
+        tb_qbuy = tb_fbuy = tb_fsell = tb_other = pt.PrettyTable()        
+        tb_qbuy.field_names = tb_fbuy.field_names = tb_fsell.field_names = tb_other.field_names = ["Type", "Index", "ID", "Symbol", "Price", "Quantity"]
+        qbuy, fbuy, fsell, other = 1
+        for order in account["securitiesAccount"]["orderStrategies"]:
+            if order["status"] == "QUEUED":
+                pending_symbol = order["orderLegCollection"][0]["instrument"]["symbol"]
+                pending_orders[pending_symbol] = []
+            if order["status"] == "QUEUED":
+                pending_orders[pending_symbol].append(order["orderId"])
+
+            if order["status"] == "QUEUED" and order["orderLegCollection"][0]["instruction"] == "BUY":
+                queued_buy_orders_1.append(order["orderId"])
+                tb_qbuy.add_row(["QBuy",qbuy, order["orderId"], order["orderLegCollection"]["instrument"]["symbol"], order["price"], order["quantity"]])
+                qbuy += 1
+            elif order["status"] == "FILLED" and order["orderLegCollection"][0]["instruction"] == "BUY":
+                filled_buy_orders[order["orderId"]] = []
+                filled_buy_orders[order["orderId"]].append(order["orderLegCollection"][0]["instrument"]["symbol"])
+                filled_buy_orders[order["orderId"]].append(order["price"])
+                filled_buy_orders[order["orderId"]].append(order["quantity"])
+                tb_fbuy.add_row(["QBuy",qbuy, order["orderId"], order["orderLegCollection"]["instrument"]["symbol"], order["price"], order["quantity"]])
+                fbuy += 1
+            elif order["status"] == "FILLED" and order["orderLegCollection"][0]["instruction"] == "SELL":
+                filled_sell_orders.append(order["orderId"])
+                tb_fsell.add_row(["FSell",fsell, order["orderId"], order["orderLegCollection"]["instrument"]["symbol"], order["price"], order["quantity"]])
+                fsell += 1
+            else:
+                other_orders.append(order["orderId"])
+                tb_other.add_row(["Others",other, order["orderId"], order["orderLegCollection"]["instrument"]["symbol"], order["price"], order["quantity"]])
+                other += 1
+        print(tb_other, "\n"*2, tb_fbuy, "\n"*2, tb_fsell, "\n"*2, tb_qbuy)
+       
+        if queued_buy_orders_0:
+            for i in queued_buy_orders_0:
+                if i in filled_buy_orders.keys():
+                    sell_symbol = filled_buy_orders[i][0]
+                    sell_price = round(filled_buy_orders[i][1] * 1.02, 4)
+                    sell_amount = filled_buy_orders[i][2]
+                    print("Command: Place SELL order = %d shares of %s at price $%.4f" % (sell_amount, sell_symbol, sell_price))
+                    place_order("SELL", sell_symbol, sell_price, sell_amount)
+                    print("Sell order placed. Filled sell order number: %d" % len(filled_sell_orders))
+            queued_buy_orders_0 = queued_buy_orders_1
+        else:
+            queued_buy_orders_0 = copy.deepcopy(queued_buy_orders_1)
+        balance_order_info = {"balance": balance, "order_info":{"queued_buy_orders_0": queued_buy_orders_0, 
+                              "queued_buy_orders_1": queued_buy_orders_1, "filled_buy_orders": filled_buy_orders, 
+                              "filled_sell_orders": filled_sell_orders, "canceled_orders": canceled_orders}}
+    else:
+        balance_order_info = {"balance": balance}
+    return balance_order_info
+
+
+def place_order(direction, symbol, price, amount):
+    direction = direction
+    symbol = symbol
+    price = price
+    amount = amount
+    url_orders = r'https://api.tdameritrade.com/v1/accounts/{}/orders'.format(accountId)
+    payload_orders = {'session': 'NORMAL', 
+                    'orderType': 'LIMIT', 
+                    'duration': 'DAY', 
+                    'orderStrategyType': 'SINGLE',
+                    'price': price,                        
+                    'orderLegCollection': [{'instruction': direction, 'quantity': amount, 'instrument': {'symbol': symbol, 'assetType': 'EQUITY'}}]}
+    content_orders = requests.post(url=url_orders, json=payload_orders, headers=header_2)
+    print(content_orders.status_code)
+    print("【%s】 order: %s, $%4.f, %d shares submitted." % (drection, amount, symbol, price))
+    # content_query_orders = requests.get(url=url_orders, headers=header_1)
+    # print(content_query_orders.status_code)
+    # data_orders = content_query_orders.json()
+    # print(data_orders)
+    # order_id = data_orders[0]['OrderId']
 
 
 class WebSocketClient(object):
@@ -101,8 +216,8 @@ class WebSocketClient(object):
         self.count = 0
 
     def database_connect(self):
-        server = 'USER-20190221FP\\SQLEXPRESS'
-        database = 'stock_database'
+        server = 'YOUR SQL SERVER NAME'
+        database = 'YOUR STOCK PRICE DATABASE'
         sql_driver = '{ODBC Driver 17 for SQL Server}'
         self.cnxn = pyodbc.connect(driver=sql_driver, server=server, database=database, trusted_connection='yes')
         self.crsr = self.cnxn.cursor()
@@ -114,11 +229,30 @@ class WebSocketClient(object):
         self.crsr.execute(query, data)
         self.cnxn.commit()
 
+    def account_init(self):
+        self.stocks_init = get_balance_order_info()
+        self.database_connect()
+        if self.stocks_init["balance"]["stock_position"]:
+            for i in self.stocks_init["balance"]["stock_position"].keys():
+                i_id_tuple = self.crsr.execute('SELECT MAX(id) FROM nasdaq_stocks WHERE symbol = ?', i).fetchone()
+                i_id, = i_id_tuple
+                i_price_tuple = self.crsr.execute('SELECT last_price FROM nasdaq_stocks where id = ?', i_id).fetchone()
+                i_price, = i_price_tuple
+                i_average_price = round(self.stocks_init["balance"]["stock_position"][i]["price"] * 1.05, 4)
+                print("【Holdings】 The current market price of %s holding is %.4f" % (i, i_price))
+                if i_price > i_average_price:
+                    print("【Initialization】: 【%s】 SELL at market price 【%.4f】..." % (i, i_price))
+                else:
+                    print("【Initialization】: 【%s】 SELL at market price 【%.4f】..." % (i, i_average_price))
+        else:
+            print("No holdings currently...")
+        self.cnxn.close() 
+
     async def connect(self):
         uri = 'wss://' + user_rsp['streamerInfo']['streamerSocketUrl'] + '/ws'
         self.connection = await websockets.client.connect(uri)
         if self.connection.open:
-            print('Connection Established. Client Connectd.')
+            print('Websocket Connection Established...')
             return self.connection
 
     async def sendMsg(self, message):
@@ -129,10 +263,6 @@ class WebSocketClient(object):
             try:
                 message = await connection.recv()
                 message_decoded = json.loads(message)
-                # print('Received Message From Server: ')
-                # print('-'*54)
-                # print(message_decoded)
-                print('-'*54)
                 query = 'INSERT INTO nasdaq_stocks (data_time, symbol, last_price, bid_size, ask_size, total_volume, \
                          last_trade_time, high_price, low_price, volatility, open_price, status, delayed) \
                          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);'
@@ -158,7 +288,7 @@ class WebSocketClient(object):
                     self.database_execute(query_del, data_time)
                     print(' %d Data Has Successfully Inserted Into the Database.' % stocks_num)
                     print('-'*54)
-                    self.cnxn.close()       
+                    self.cnxn.close()   
             except websockets.exceptions.ConnectionClosed:
                 print('Connection with server CLOSED in recvMsg method...')
                 break
@@ -167,7 +297,7 @@ class WebSocketClient(object):
         while True:
             try:
                 await connection.send('ping')
-                print('已发送ping...')
+                print('PING Command has been sent...')
                 await asyncio.sleep(20)
             except websockets.exceptions.ConnectionClosed as ErrorMsg:
                 print('Connection with server CLOSED with no heartbeat...')
@@ -175,10 +305,14 @@ class WebSocketClient(object):
                 break
 
     async def dataAnalysis(self):
-        i = 1
+        k = 1
+        count_buy_orders = 0
         while True:
-            self.database_connect()
+            await asyncio.sleep(30)
             q = 1
+            if k == 1:
+                self.account_init()
+            self.database_connect()
             all_data = {}
             recom_time = timer()
             recom_record_list = [recom_time]
@@ -212,35 +346,52 @@ class WebSocketClient(object):
                     for j in range(len(price_list)):
                         if price_list[0] < 0.98 * price_list[j]:
                             p += 1
-                    if p > 0:
-                        recom_record = 'Round【%d】 Recommandation【%d】: Buy %s at Price=%.4f' % (i, q, symbol, price_list[0])
-                        print(recom_time, '\n', recom_record)
+                    if p > 0 and self.stocks_init["balance"]["free_value"] > 50 and len(pending_orders[symbol]) <= 3:
+                        buy_price = 0.6 * price_list[0]
+                        buy_amount = int(50 / buy_price)-1
+                        recom_record = 'Analysis【%d】 Recommandation【%d】: Buy %s at Price=%.4f' % (k, q, symbol, buy_price)
                         recom_record_list.append(recom_record)
-                        q += 1
-            i += 1
+                        if buy_amount > 1:
+                            place_order("BUY", symbol, buy_price, buy_amount)
+                            q +=1
+                            ount_buy_orders += 1
+                            if count_buy_orders_one_round > 30:
+                                await asyncio.sleep(0.5)
+                        else:
+                            print("Not Enough Balance Available!!!")
+                              
             write_info(recom_record_list, 'Recommandation.txt', 'a')
+            print("Analysis:【%d】----Buys: 【%d】----Total Buys:【%d】 " % (k, q, count_buy_orders))
             self.cnxn.close() 
-            await asyncio.sleep(20)
-            
-            
+            k += 1
+
+
+# personal info
+accountId = 'Your Account ID'
+apiKey = "Your API Key"
+username = "Your username"
+password = "Your password"
+
+filled_buy_orders = {}
+filled_sell_orders = []
+queued_buy_orders_0 = []
+queued_buy_orders_1 = []
+other_orders = []
+pending_orders = {}
+
 nest_asyncio.apply()
 access_token = get_access_token()
 header_1 = {'Authorization': 'Bearer {}'.format(access_token)}
 header_2 = {'Authorization': 'Bearer {}'.format(access_token), 'Content-Type': 'application/json'}
-
-# define User Principles endpoint
 url = r'https://api.tdameritrade.com/v1/userprincipals'
-# defin params
 params = {'fields': 'streamerSubscriptionKeys,streamerConnectionInfo'}
-# make a request
 content = requests.get(url=url, params=params, headers=header_1)
 user_rsp = content.json()
 write_info(user_rsp, 'td_test.txt', 'a')
-
 tokenTimeStamp = user_rsp['streamerInfo']['tokenTimestamp']
 date = dateutil.parser.parse(tokenTimeStamp, ignoretz=True)
 tokenMs = unix_time_millis(date)
-symbols = get_all_symbol()
+symbols = get_all_symbol()  
 
 credentials = {'userid': user_rsp['accounts'][0]['accountId'], 
                'company': user_rsp['accounts'][0]['company'],
@@ -272,23 +423,24 @@ request_data = {"requests": [{"service": "QUOTE",
                                              "fields": "0,3,4,5,8,10,12,13,24,28,48"}}]}
 
 login_encoded = json.dumps(request_login)
-data_encoded = json.dumps(request_data) 
-account = get_account_info()
+data_encoded = json.dumps(request_data)
 
 
-# if __name__ == '__main__':
-#     client = WebSocketClient()
-#     loop = asyncio.get_event_loop()
-#     connection = loop.run_until_complete(client.connect())
-#     tasks = [asyncio.ensure_future(client.recvMsg(connection)),
-#              asyncio.ensure_future(client.sendMsg(login_encoded)),
-#              asyncio.ensure_future(client.recvMsg(connection)),
-#              asyncio.ensure_future(client.sendMsg(data_encoded)),
-#              asyncio.ensure_future(client.recvMsg(connection)),
-#              asyncio.ensure_future(client.dataAnalysis())]
-# loop.run_until_complete(asyncio.wait(tasks))
+if __name__ == '__main__':
+    client = WebSocketClient()
+    loop = asyncio.get_event_loop()
+    connection = loop.run_until_complete(client.connect())
+    tasks = [asyncio.ensure_future(client.recvMsg(connection)),
+             asyncio.ensure_future(client.sendMsg(login_encoded)),
+             asyncio.ensure_future(client.recvMsg(connection)),
+             asyncio.ensure_future(client.sendMsg(data_encoded)),
+             asyncio.ensure_future(client.recvMsg(connection)),
+             asyncio.ensure_future(client.dataAnalysis())]
+loop.run_until_complete(asyncio.wait(tasks))
+# The program stops here.
 
 
+# Some extra information:
 # header_1 = {'Authorization': 'Bearer {}'.format(access_token)}
 # url_accounts = r'https://api.tdameritrade.com/v1/accounts'
 # content_accounts = requests.get(url=url_accounts, headers=header_1)
@@ -337,7 +489,7 @@ account = get_account_info()
 # # Make a request
 # content = requests.get(url = url_period_prices, params=payload_period_prices)
 
-# # Convert it to a adictionary
+# # Convert it to a dictionary
 # data_period_prices =  content.json()
 # print(data_period_prices)
 # f = open('access_token.txt', 'a+')
@@ -388,14 +540,14 @@ account = get_account_info()
     # time.sleep(1)
     # browser.find_by_text('Can\'t get the text message?').first.click()
     # browser.find_by_value("Answer a security question").first.click()
-    # if browser.is_text_present('What is xxx?'):
-    #   browser.find_by_id('secretquestion').first.fill('youranswer')
-    # elif browser.is_text_present('What xxx?'):
-    #   browser.find_by_id('secretquestion').first.fill('youranswer')
-    # elif browser.is_text_present('What xxx?'):
-    #   browser.find_by_id('secretquestion').first.fill('youranswer')
-    # elif browser.is_text_present('What xxx?'):
-    #   browser.find_by_id('secretquestion').first.fill('youranswer')
+    # if browser.is_text_present(HERE PLEASE TYPE IN YOUR SECURITY QUESITON, SUCH AS:'What is your paternal grandfather\'s first name?'):
+    #   browser.find_by_id('secretquestion').first.fill('YOUR ANSWER')
+    # elif browser.is_text_present('SECURITY QUESTION 2'):
+    #   browser.find_by_id('secretquestion').first.fill('YOUR ANSWER 2')
+    # elif browser.is_text_present('SECURITY QUESTION 3'):
+    #   browser.find_by_id('secretquestion').first.fill('YOUR ANSWER 3')
+    # elif browser.is_text_present('SECURITY QUESTION 3'):
+    #   browser.find_by_id('secretquestion').first.fill('YOUR ANSWER 4')
     # browser.find_by_id('accept').first.click()
     # time.sleep(1)
     # browser.find_by_id('accept').first.click()
