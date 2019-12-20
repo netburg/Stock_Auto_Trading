@@ -1,6 +1,8 @@
-Warning: Only qualified day-trader could use this script. Please note that using this script may be risky and lead to trading loss. 
+# TDAmeritrade Automatic High Frequency Trading Program Instructions 
 
-High Frequency Trading Condithions：
+## Warning: Only qualified day-trader could use this script. Please note that using this script may be risky and lead to trading loss. 
+
+## High Frequency Trading Condithions：
 
 1 volume/shares outstanding）>2.5% (Not realized yet. To be developed.)
 
@@ -20,6 +22,6 @@ High Frequency Trading Condithions：
 
 9 Requests to TDAmeritrade is limited to 120 times in 2 minutes.
 
-The script is being tested and needs to be refined. 
-Please do not use it for profit purpose. Copyright reserved.
-If you have any questions, please feel free to contact me at zhangjinprc@gmail.com.
+## The script is being tested and needs to be refined. 
+## Please do not use it for profit purpose. Copyright reserved.
+## If you have any questions, please feel free to contact me at zhangjinprc@gmail.com.
