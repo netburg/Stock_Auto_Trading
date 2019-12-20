@@ -17,7 +17,7 @@
 
 6 Data server: local SQL Server (window connection). 
 
-7 When get your fist token, please use script in Note No.1 and copy that to file 'access_token.txt'.
+7 When get your first token, please use script in Note No.1 and copy that to file 'access_token.txt'.
 
 8 Each deal is set <$50. It could be customized by yourself.
 
